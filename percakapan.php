@@ -74,7 +74,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $pdo->prepare("UPDATE permintaan SET status='Selesai' WHERE id_permintaan=?")->execute([$id]);
             $pdo->commit();
         }
-        go('percakapan.php?id=' . $id);
+        go('percakapan.php?id=' . $id . '#detail-komunikasi');
     } catch (Throwable $e) {
         if ($pdo->inTransaction()) $pdo->rollBack();
         $err = $e instanceof PDOException ? 'Terjadi kesalahan penyimpanan. Periksa apakah transaksi sudah tercatat.' : $e->getMessage();
@@ -93,33 +93,164 @@ $title = 'Percakapan Pengajuan';
 require 'includes/header.php'; ?>
 <p><a href="<?= $isBuyer ? BASE . '/akun.php' : ($u['role'] === 'admin' ? BASE . '/admin/permintaan.php' : BASE . '/agen/permintaan.php') ?>">&larr; Kembali ke daftar pengajuan</a></p>
 <h2><?= e($r['judul']) ?></h2>
-<p class="mut">Pembeli: <?= e($r['pembeli']) ?> · Agen: <?= e($r['agen']) ?> · Harga awal: <?= rp($r['harga']) ?></p><?php if ($err): ?><div class="msg err"><?= e($err) ?></div><?php endif ?><div class="box">
+<p class="mut">Pembeli: <?= e($r['pembeli']) ?> · Agen: <?= e($r['agen']) ?> · Harga awal: <?= rp($r['harga']) ?></p><?php if ($err): ?><div class="msg err"><?= e($err) ?></div><?php endif ?><div class="box" id="detail-komunikasi">
     <h3>Detail Komunikasi</h3>
-    <div class="chatlist"><?php foreach ($messages as $m): ?><div class="chat <?= $m['id_pengirim'] == $u['id'] ? 'mine' : '' ?>"><b><?= e($m['nama']) ?> (<?= e($m['role']) ?>)</b>
-                <div><?= nl2br(e($m['isi'])) ?></div><small><?= e($m['created_at']) ?></small>
-            </div><?php endforeach ?><?php if (!$messages): ?><p class="mut">Belum ada pesan. Agen atau pembeli dapat memulai percakapan.</p><?php endif ?></div>
-    <form method="post" class="f" style="margin-top:14px"><?= csrf() ?><input type="hidden" name="a" value="pesan"><textarea name="isi" rows="5" placeholder="Tulis pesan..." required></textarea><button>Kirim pesan</button></form>
+    <div class="chatlist">
+        <?php foreach ($messages as $m): ?>
+            <div class="chat <?= (int)$m['id_pengirim'] === (int)$u['id'] ? 'mine' : '' ?>">
+                <div class="chat-header">
+                    <b><?= e($m['nama']) ?></b>
+                    <small class="chat-role"><?= (int)$m['id_pengirim'] === (int)$u['id'] ? '(Anda)' : '(' . e(ucfirst($m['role'])) . ')' ?></small>
+                </div>
+                <div class="chat-body"><?= nl2br(e($m['isi'])) ?></div>
+                <div class="chat-time">
+                    <small><?= e(tgl($m['created_at'])) ?></small>
+                </div>
+            </div>
+        <?php endforeach; ?>
+        <?php if (!$messages): ?>
+            <p class="mut" style="text-align:center; padding:20px;">Belum ada pesan. Agen atau pembeli dapat memulai percakapan di sini.</p>
+        <?php endif; ?>
+    </div>
+    <?php if ($u['role'] !== 'admin'): ?>
+        <form method="post" class="chat-input-bar">
+            <?= csrf() ?>
+            <input type="hidden" name="a" value="pesan">
+            <textarea name="isi" rows="1" placeholder="Ketik pesan..." required></textarea>
+            <button class="btn btn-send">Kirim</button>
+        </form>
+    <?php else: ?>
+        <p class="mut" style="margin-top:10px; font-size:13px;"><i>ℹAkun Administrator memantau percakapan dalam mode baca (read-only).</i></p>
+    <?php endif; ?>
 </div>
 <div class="box">
-    <h3>Usulan jadwal dan harga</h3>
-    <p class="mut">Pihak yang mengajukan tidak dapat menyetujui usulannya sendiri. Persetujuan hanya dapat diberikan oleh pihak lawan.</p><?php foreach ($proposals as $x): ?>
-        <div class="proposal <?= $x['status'] === 'Menunggu' ? 'pending' : '' ?>">
-            <div class="row"><b><?= e($x['jenis']) ?> · <?= e($x['pengusul']) ?> (<?= e($x['role_pengusul']) ?>)</b><span class="tag"><?= e($x['status']) ?></span></div>
+    <h3>Usulan Jadwal & Kesepakatan Harga</h3>
+    <p class="mut" style="margin-top:0;">Pihak yang mengajukan usulan tidak dapat menyetujui usulannya sendiri. Persetujuan hanya dapat diberikan oleh pihak lawan.</p>
 
-            <p><b><?= $x['jenis'] === 'Jadwal' ? 'Jadwal:' : 'Harga:' ?></b> <?= $x['jenis'] === 'Jadwal' ? e($x['tanggal_usulan']) : rp($x['harga_usulan']) ?></p><?php if ($x['catatan']): ?><p><?= e($x['catatan']) ?></p><?php endif ?><?php if ($x['status'] === 'Menunggu' && (int)$x['id_pengusul'] !== (int)$u['id']): ?>
-                <div class="actions">
-                    <form method="post"><?= csrf() ?><input type="hidden" name="a" value="respon"><input type="hidden" name="id_usulan" value="<?= $x['id_usulan'] ?>"><input type="hidden" name="decision" value="Disetujui"><button>Setujui</button></form>
-                    <form method="post"><?= csrf() ?><input type="hidden" name="a" value="respon"><input type="hidden" name="id_usulan" value="<?= $x['id_usulan'] ?>"><input type="hidden" name="decision" value="Ditolak"><button class="del">Tolak</button></form>
+    <?php
+    $activeProposal = null;
+    foreach ($proposals as $item) {
+        if ($item['status'] === 'Menunggu') {
+            $activeProposal = $item;
+            break;
+        }
+    }
+    ?>
+
+    <?php if ($activeProposal): ?>
+        <div class="pending-box">
+            <h4>Usulan Sedang Menunggu Konfirmasi</h4>
+            <div class="pending-body">
+                <p><strong>Jenis Usulan:</strong> <?= $activeProposal['jenis'] === 'Jadwal' ? 'Jadwal Survei Lapangan' : 'Negosiasi Harga Properti' ?></p>
+                <p><strong>Nilai yang Diajukan:</strong> <b style="font-size:16px; color:#0f2a43"><?= $activeProposal['jenis'] === 'Jadwal' ? e(tgl($activeProposal['tanggal_usulan'])) : rp($activeProposal['harga_usulan']) ?></b></p>
+                <p><strong>Diajukan oleh:</strong> <?= e($activeProposal['pengusul']) ?> (<?= e(ucfirst($activeProposal['role_pengusul'])) ?>) · <?= e(tgl($activeProposal['created_at'])) ?></p>
+                <div class="pending-note">
+                    <b>Catatan Pengusul:</b>
+                    <div style="margin-top:4px"><?= $activeProposal['catatan'] ? e($activeProposal['catatan']) : '<em class="mut">Tidak ada catatan khusus yang dilampirkan.</em>' ?></div>
                 </div>
-                <?php elseif ($x['responded_by']): ?><small class="mut">Ditanggapi oleh <?= e($x['penanggap']) ?> pada <?= e($x['responded_at']) ?></small><?php endif ?>
+            </div>
+            <?php if ($u['role'] !== 'admin' && (int)$activeProposal['id_pengusul'] !== (int)$u['id']): ?>
+                <div class="pending-actions">
+                    <form method="post" style="display:inline"><?= csrf() ?>
+                        <input type="hidden" name="a" value="respon">
+                        <input type="hidden" name="id_usulan" value="<?= $activeProposal['id_usulan'] ?>">
+                        <input type="hidden" name="decision" value="Disetujui">
+                        <button class="btn btn-approve">Setujui Usulan</button>
+                    </form>
+                    <form method="post" style="display:inline" onsubmit="return confirm('Apakah Anda yakin ingin menolak usulan ini?')"><?= csrf() ?>
+                        <input type="hidden" name="a" value="respon">
+                        <input type="hidden" name="id_usulan" value="<?= $activeProposal['id_usulan'] ?>">
+                        <input type="hidden" name="decision" value="Ditolak">
+                        <button class="btn btn-reject">Tolak Usulan</button>
+                    </form>
+                </div>
+            <?php elseif ((int)$activeProposal['id_pengusul'] === (int)$u['id']): ?>
+                <small class="mut">ℹAnda yang mengajukan usulan ini. Menunggu tanggapan dari pihak lawan.</small>
+            <?php endif; ?>
         </div>
-        <?php endforeach ?>
-        <?php if (!$proposals): ?><p class="mut">Belum ada usulan.</p><?php endif ?><form method="post" class="f mutedbox" style="margin-top:14px"><?= csrf() ?><input type="hidden" name="a" value="usul">
-        <div class="row"><label>Jenis usulan<select name="jenis" id="jenis" onchange="toggleProposal()">
-                    <option>Jadwal</option>
-                    <option>Harga</option>
-                </select></label><label id="datefield">Tanggal dan waktu<input type="datetime-local" name="tanggal_usulan" min="<?= date('Y-m-d\TH:i') ?>"></label><label id="pricefield" hidden>Penawaran harga (Rp)<input type="number" name="harga_usulan" min="1" placeholder="Contoh: 450000000"></label></div><label>Catatan (opsional)<input name="catatan" maxlength="255"></label><button>Kirim usulan</button>
-    </form>
+    <?php endif; ?>
+
+    <h4 style="margin:20px 0 8px 0;">Riwayat Pengajuan Usulan</h4>
+    <?php if ($proposals): ?>
+        <div class="tablewrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Waktu Usul</th>
+                        <th>Jenis</th>
+                        <th>Detail Usulan</th>
+                        <th>Pengusul</th>
+                        <th>Catatan Pengusul</th>
+                        <th>Status</th>
+                        <th>Keterangan Tanggapan</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($proposals as $x): ?>
+                        <tr>
+                            <td><?= e(tgl($x['created_at'])) ?></td>
+                            <td><b><?= $x['jenis'] === 'Jadwal' ? 'Jadwal' : 'Harga' ?></b></td>
+                            <td><b><?= $x['jenis'] === 'Jadwal' ? e(tgl($x['tanggal_usulan'])) : rp($x['harga_usulan']) ?></b></td>
+                            <td><?= e($x['pengusul']) ?> <small class="mut">(<?= e($x['role_pengusul']) ?>)</small></td>
+                            <td style="max-width:220px">
+                                <?php if ($x['catatan']): ?>
+                                    <span class="note-pill" title="<?= e($x['catatan']) ?>"> <?= e($x['catatan']) ?></span>
+                                <?php else: ?>
+                                    <span class="mut">-</span>
+                                <?php endif; ?>
+                            </td>
+                            <td><span class="tag <?= e($x['status']) ?>"><?= e($x['status']) ?></span></td>
+                            <td>
+                                <?php if ($x['status'] === 'Menunggu'): ?>
+                                    <span class="mut">Menunggu tanggapan</span>
+                                <?php elseif ($x['responded_by']): ?>
+                                    <small><?= e($x['penanggap']) ?><br><span class="mut"><?= e(tgl($x['responded_at'])) ?></span></small>
+                                <?php else: ?>
+                                    -
+                                <?php endif; ?>
+                            </td>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+    <?php else: ?>
+        <p class="mut">Belum ada riwayat usulan jadwal maupun harga.</p>
+    <?php endif; ?>
+
+    <?php if ($u['role'] !== 'admin' && $r['status'] !== 'Selesai' && $r['status_properti'] !== 'Terjual'): ?>
+        <div style="margin-top:24px; padding-top:16px; border-top:1px dashed #cbd5e1">
+            <h4 style="margin:0 0 12px 0;">Ajukan Usulan Baru</h4>
+            <?php if ($activeProposal): ?>
+                <div class="alert" style="margin:0">
+                    Saat ini masih ada usulan yang menunggu tanggapan. Selesaikan atau tanggapi usulan aktif di atas sebelum membuat usulan baru.
+                </div>
+            <?php else: ?>
+                <form method="post" class="f mutedbox">
+                    <?= csrf() ?>
+                    <input type="hidden" name="a" value="usul">
+                    <div class="row">
+                        <label>Jenis Usulan:
+                            <select name="jenis" id="jenis" onchange="toggleProposal()">
+                                <option value="Jadwal">Usulan Jadwal Survei</option>
+                                <option value="Harga">Usulan Negosiasi Harga</option>
+                            </select>
+                        </label>
+                        <label id="datefield">Tanggal dan Waktu Survei:
+                            <input type="datetime-local" name="tanggal_usulan" min="<?= date('Y-m-d\TH:i') ?>">
+                        </label>
+                        <label id="pricefield" hidden>Penawaran Harga (Rp):
+                            <input type="number" name="harga_usulan" min="1" placeholder="Contoh: 450000000" class="format-rupiah">
+                        </label>
+                    </div>
+                    <label>Catatan Pengajuan (Opsional):
+                        <input name="catatan" maxlength="255">
+                    </label>
+                    <button>Kirim Usulan</button>
+                </form>
+            <?php endif; ?>
+        </div>
+    <?php endif; ?>
 </div>
 <div class="box">
     <h3>Jadwal survei yang disepakati</h3><?php if (!$schedules): ?><p class="mut">Belum ada jadwal yang disetujui kedua pihak.</p><?php else: ?><ul><?php foreach ($schedules as $sc): ?><li><?= e($sc['tanggal_survei']) ?> — <?= e($sc['status_survei']) ?></li><?php endforeach ?></ul><?php endif ?>

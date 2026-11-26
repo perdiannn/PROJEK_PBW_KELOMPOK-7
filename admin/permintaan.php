@@ -83,7 +83,6 @@ require '../includes/header.php';
                 <th>Agen Penanggung Jawab</th>
                 <th>Status</th>
                 <th>Jadwal Survei</th>
-                <th>Pesan</th>
                 <th>Aksi</th>
             </tr>
         </thead>
@@ -109,15 +108,14 @@ require '../includes/header.php';
                     <td>
                         <?= $r['survei'] ? '<span class="tag" style="background:#e0f2fe;color:#0369a1">' . e(tgl($r['survei'])) . '</span>' : '<span class="mut">-</span>' ?>
                     </td>
-                    <td><span class="badge"><?= (int)$r['total_pesan'] ?> Pesan</span></td>
                     <td>
-                        <a class="btn sec" href="<?= BASE ?>/percakapan.php?id=<?= (int)$r['id_permintaan'] ?>">Lihat Percakapan</a>
+                        <a class="btn" href="<?= BASE ?>/percakapan.php?id=<?= (int)$r['id_permintaan'] ?>">Buka Percakapan</a>
                     </td>
                 </tr>
             <?php endforeach; ?>
             <?php if (!$rows): ?>
                 <tr>
-                    <td colspan="8" class="mut" style="text-align:center;padding:24px">
+                    <td colspan="7" class="mut" style="text-align:center;padding:24px">
                         Tidak ada data pengajuan yang cocok dengan kriteria filter.
                     </td>
                 </tr>

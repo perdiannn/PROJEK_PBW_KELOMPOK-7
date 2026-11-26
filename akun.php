@@ -34,7 +34,6 @@ require 'includes/header.php';
                 <th>Agen Pengelola</th>
                 <th>Status</th>
                 <th>Jadwal Survei</th>
-                <th>Pesan / Notifikasi</th>
                 <th>Aksi</th>
             </tr>
         </thead>
@@ -52,15 +51,12 @@ require 'includes/header.php';
                         <?php if ($r['harga_sepakat']): ?>
                             <div class="mut" style="font-size:12px;margin-top:4px">Harga deal: <b><?= rp($r['harga_sepakat']) ?></b></div>
                         <?php endif; ?>
+                        <?php if ($r['perlu_respons'] > 0): ?>
+                            <div style="margin-top:4px"><span class="badge" style="background:#fef3c7;color:#92400e"> Butuh respon</span></div>
+                        <?php endif; ?>
                     </td>
                     <td>
                         <?= $r['survei'] ? '<span class="tag" style="background:#e0f2fe;color:#0369a1">' . e(tgl($r['survei'])) . '</span>' : '<span class="mut">-</span>' ?>
-                    </td>
-                    <td>
-                        <span class="badge" style="background:#f3f4f6;color:#374151"><?= (int)$r['total_pesan'] ?> Pesan</span>
-                        <?php if ($r['perlu_respons'] > 0): ?>
-                            <span class="badge" style="background:#fef3c7;color:#92400e;margin-left:4px">Butuh respon</span>
-                        <?php endif; ?>
                     </td>
                     <td>
                         <a class="btn" href="<?= BASE ?>/percakapan.php?id=<?= (int)$r['id_permintaan'] ?>">Buka Percakapan</a>
@@ -69,7 +65,7 @@ require 'includes/header.php';
             <?php endforeach; ?>
             <?php if (!$rows): ?>
                 <tr>
-                    <td colspan="7" class="mut" style="text-align:center;padding:24px">
+                    <td colspan="6" class="mut" style="text-align:center;padding:24px">
                         Belum ada pengajuan properti. Silakan jelajahi <a href="<?= BASE ?>/">Katalog Properti</a> dan kirimkan minat Anda.
                     </td>
                 </tr>
